@@ -7,7 +7,8 @@ import traceback
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-TARGET_API = "https://api.voicevox.su-shiki.com/v1"
+# 現在安定して利用できるVOICEVOX互換の公開エンドポイント
+TARGET_API = "https://voicevox-engine.azurewebsites.net"
 
 @app.route('/proxy-speak', methods=['POST', 'OPTIONS'])
 def proxy_speak():
@@ -22,12 +23,11 @@ def proxy_speak():
         return "文章がありません", 400
 
     try:
-        # 1. VOICEVOXから音声設定（クエリ）を取得
-        print(f"Requesting audio_query for text: {text}")
-        q_res = requests.post(f"{TARGET_API}/audio_query", params={"text": text, "speaker": 13}, timeout=10)
+        # 1. VOICEVOXから音声設定（クエリ）を取得 (おばあちゃん等に馴染みのある話者ID: 3 または 13など)
+        speaker_id = 3 # おばあちゃんや女性キャラクター等のデフォルトとして一般的なID
+        q_res = requests.post(f"{TARGET_API}/audio_query", params={"text": text, "speaker": speaker_id}, timeout=15)
         
         if not q_res.ok:
-            print(f"Audio query failed: {q_res.status_code} - {q_res.text}")
             return f"クエリ作成エラー: {q_res.text}", 500
         
         q_data = q_res.json()
@@ -35,18 +35,15 @@ def proxy_speak():
         q_data["pitchScale"] = -0.05
 
         # 2. 音声合成を実行
-        print("Requesting synthesis...")
-        s_res = requests.post(f"{TARGET_API}/synthesis", params={"speaker": 13}, json=q_data, timeout=15)
+        s_res = requests.post(f"{TARGET_API}/synthesis", params={"speaker": speaker_id}, json=q_data, timeout=20)
         
         if not s_res.ok:
-            print(f"Synthesis failed: {s_res.status_code} - {s_res.text}")
             return f"音声合成エラー: {s_res.text}", 500
 
-        print("Successfully generated audio.")
+        # 3. 音声ファイル（WAV）をMonacaへ返す
         return send_file(io.BytesIO(s_res.content), mimetype='audio/wav')
 
     except Exception as e:
-        print("Exception occurred:")
         traceback.print_exc()
         return str(e), 500
 
