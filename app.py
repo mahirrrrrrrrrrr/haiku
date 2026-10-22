@@ -1,14 +1,17 @@
 from flask import Flask, request, send_file
-import requests
+import os
 import io
 from flask_cors import CORS
+from google import genai
+from google.genai import types
 import traceback
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# 現在安定して利用できるVOICEVOX互換の公開エンドポイント
-TARGET_API = "https://voicevox-engine.azurewebsites.net"
+# Renderに設定した環境変数からGeminiのAPIキーを読み込む
+api_key = os.environ.get("GEMINI_API_KEY")
+client = genai.Client(api_key=api_key)
 
 @app.route('/proxy-speak', methods=['POST', 'OPTIONS'])
 def proxy_speak():
@@ -17,31 +20,42 @@ def proxy_speak():
 
     data = request.get_json() or {}
     text = data.get('text', '')
-    speed = float(data.get('speed', 0.75))
     
     if not text:
         return "文章がありません", 400
 
     try:
-        # 1. VOICEVOXから音声設定（クエリ）を取得 (おばあちゃん等に馴染みのある話者ID: 3 または 13など)
-        speaker_id = 3 # おばあちゃんや女性キャラクター等のデフォルトとして一般的なID
-        q_res = requests.post(f"{TARGET_API}/audio_query", params={"text": text, "speaker": speaker_id}, timeout=15)
-        
-        if not q_res.ok:
-            return f"クエリ作成エラー: {q_res.text}", 500
-        
-        q_data = q_res.json()
-        q_data["speedScale"] = speed
-        q_data["pitchScale"] = -0.05
+        # Geminiに「おばあちゃん風の優しいトーンでゆっくり朗読する音声データを作る」ように指示
+        prompt = f"以下の俳句を、おばあちゃんのようにおっとりと優しく、ゆっくりとしたトーンで読み上げてください。音声データのみを出力してください: {text}"
 
-        # 2. 音声合成を実行
-        s_res = requests.post(f"{TARGET_API}/synthesis", params={"speaker": speaker_id}, json=q_data, timeout=20)
-        
-        if not s_res.ok:
-            return f"音声合成エラー: {s_res.text}", 500
+        # Geminiの音声出力対応モデル（例: gemini-2.5-flash または gemini-2.5-pro 等）で音声（AUDIO）を指定
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_modalities=["AUDIO"],
+                speech_config=types.SpeechConfig(
+                    voice_config=types.VoiceConfig(
+                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                            voice_name="Puck" # またはお好みのボイス（Kore, Fenrirなど）
+                        )
+                    )
+                )
+            )
+        )
 
-        # 3. 音声ファイル（WAV）をMonacaへ返す
-        return send_file(io.BytesIO(s_res.content), mimetype='audio/wav')
+        # 生成された音声バイナリを取り出す
+        audio_bytes = None
+        for part in response.candidates[0].content.parts:
+            if part.inline_data and part.inline_data.mime_type.startswith("audio/"):
+                audio_bytes = part.inline_data.data
+                break
+
+        if not audio_bytes:
+            return "音声の生成に失敗しました", 500
+
+        # Monacaへ音声ファイルとして返す
+        return send_file(io.BytesIO(audio_bytes), mimetype='audio/mp3')
 
     except Exception as e:
         traceback.print_exc()
