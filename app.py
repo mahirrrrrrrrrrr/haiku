@@ -5,11 +5,11 @@ from flask_cors import CORS
 from google import genai
 from google.genai import types
 import traceback
+import wave
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Renderの環境変数 GEMINI_API_KEY を使用
 api_key = os.environ.get("GEMINI_API_KEY")
 client = genai.Client(api_key=api_key)
 
@@ -25,10 +25,8 @@ def proxy_speak():
         return "文章がありません", 400
 
     try:
-        # おばあちゃん風に優しくゆっくり読むプロンプト
         prompt = f"以下の俳句を、おばあちゃんのようにおっとりと優しく、ゆっくりとしたトーンで読み上げてください: {text}"
 
-        # 音声生成専用のモデル 'gemini-2.5-flash-preview-tts' を使用
         response = client.models.generate_content(
             model='gemini-2.5-flash-preview-tts',
             contents=prompt,
@@ -37,27 +35,36 @@ def proxy_speak():
                 speech_config=types.SpeechConfig(
                     voice_config=types.VoiceConfig(
                         prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                            voice_name="Kore"  # Kore, Fenrir, Aoede などのボイスが利用可能
+                            voice_name="Kore"
                         )
                     )
                 )
             )
         )
 
-        # 生成された音声バイナリ（WAV/MP3データ）を取得
+        # 音声バイナリの抽出
         audio_bytes = None
         for candidate in response.candidates:
             for part in candidate.content.parts:
                 if part.inline_data and part.inline_data.data:
                     audio_bytes = part.inline_data.data
-                    mime_type = part.inline_data.mime_type or "audio/wav"
                     break
 
         if not audio_bytes:
-            return "音声の生成に失敗しました", 500
+            return "音声の生成に失敗しました（データが空です）", 500
 
-        # Monacaへ音声ファイルとして返す
-        return send_file(io.BytesIO(audio_bytes), mimetype=mime_type)
+        # 生データの場合はWAVヘッダーを付与してブラウザで確実再生できるようにする
+        # すでにWAVヘッダーがある場合はそのまま返す
+        if not audio_bytes.startswith(b'RIFF'):
+            wav_io = io.BytesIO()
+            with wave.open(wav_io, 'wb') as wav_file:
+                wav_file.setnchannels(1)  # モノラル
+                wav_file.setsampwidth(2)  # 16bit
+                wav_file.setframerate(24000) # サンプリングレート
+                wav_file.writeframes(audio_bytes)
+            audio_bytes = wav_io.getvalue()
+
+        return send_file(io.BytesIO(audio_bytes), mimetype='audio/wav')
 
     except Exception as e:
         traceback.print_exc()
