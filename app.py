@@ -9,7 +9,7 @@ import traceback
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Renderに設定した環境変数からGeminiのAPIキーを読み込む
+# Renderの環境変数 GEMINI_API_KEY を使用
 api_key = os.environ.get("GEMINI_API_KEY")
 client = genai.Client(api_key=api_key)
 
@@ -25,37 +25,39 @@ def proxy_speak():
         return "文章がありません", 400
 
     try:
-        # Geminiに「おばあちゃん風の優しいトーンでゆっくり朗読する音声データを作る」ように指示
-        prompt = f"以下の俳句を、おばあちゃんのようにおっとりと優しく、ゆっくりとしたトーンで読み上げてください。音声データのみを出力してください: {text}"
+        # おばあちゃん風に優しくゆっくり読むプロンプト
+        prompt = f"以下の俳句を、おばあちゃんのようにおっとりと優しく、ゆっくりとしたトーンで読み上げてください: {text}"
 
-        # Geminiの音声出力対応モデル（例: gemini-2.5-flash または gemini-2.5-pro 等）で音声（AUDIO）を指定
+        # 音声生成専用のモデル 'gemini-2.5-flash-preview-tts' を使用
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-2.5-flash-preview-tts',
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_modalities=["AUDIO"],
                 speech_config=types.SpeechConfig(
                     voice_config=types.VoiceConfig(
                         prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                            voice_name="Puck" # またはお好みのボイス（Kore, Fenrirなど）
+                            voice_name="Kore"  # Kore, Fenrir, Aoede などのボイスが利用可能
                         )
                     )
                 )
             )
         )
 
-        # 生成された音声バイナリを取り出す
+        # 生成された音声バイナリ（WAV/MP3データ）を取得
         audio_bytes = None
-        for part in response.candidates[0].content.parts:
-            if part.inline_data and part.inline_data.mime_type.startswith("audio/"):
-                audio_bytes = part.inline_data.data
-                break
+        for candidate in response.candidates:
+            for part in candidate.content.parts:
+                if part.inline_data and part.inline_data.data:
+                    audio_bytes = part.inline_data.data
+                    mime_type = part.inline_data.mime_type or "audio/wav"
+                    break
 
         if not audio_bytes:
             return "音声の生成に失敗しました", 500
 
         # Monacaへ音声ファイルとして返す
-        return send_file(io.BytesIO(audio_bytes), mimetype='audio/mp3')
+        return send_file(io.BytesIO(audio_bytes), mimetype=mime_type)
 
     except Exception as e:
         traceback.print_exc()
