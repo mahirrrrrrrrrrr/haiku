@@ -10,6 +10,7 @@ import wave
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
+# Renderに設定した環境変数からGeminiのAPIキーを読み込む
 api_key = os.environ.get("GEMINI_API_KEY")
 client = genai.Client(api_key=api_key)
 
@@ -25,8 +26,10 @@ def proxy_speak():
         return "文章がありません", 400
 
     try:
-        prompt = f"以下の俳句を、おばあちゃんのようにおっとりと優しく、ゆっくりとしたトーンで読み上げてください: {text}"
+        # 年配のおばあちゃん風の落ち着いたおっとりした語り口を指示するプロンプト
+        prompt = f"以下の俳句を、お年寄りの女性（おばあちゃん）のように、非常におっとりと優しく、落ち着いた低いトーンでゆっくり朗読してください: {text}"
 
+        # Geminiの音声生成モデルを使用
         response = client.models.generate_content(
             model='gemini-2.5-flash-preview-tts',
             contents=prompt,
@@ -35,14 +38,14 @@ def proxy_speak():
                 speech_config=types.SpeechConfig(
                     voice_config=types.VoiceConfig(
                         prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                            voice_name="Kore"
+                            voice_name="Aoede"  # 落ち着いたトーンの音声（より年配・上品な女性風）
                         )
                     )
                 )
             )
         )
 
-        # 音声バイナリの抽出
+        # 生成された音声バイナリの抽出
         audio_bytes = None
         for candidate in response.candidates:
             for part in candidate.content.parts:
@@ -53,8 +56,7 @@ def proxy_speak():
         if not audio_bytes:
             return "音声の生成に失敗しました（データが空です）", 500
 
-        # 生データの場合はWAVヘッダーを付与してブラウザで確実再生できるようにする
-        # すでにWAVヘッダーがある場合はそのまま返す
+        # WAVヘッダーを付与してブラウザで確実に再生できるようにする
         if not audio_bytes.startswith(b'RIFF'):
             wav_io = io.BytesIO()
             with wave.open(wav_io, 'wb') as wav_file:
