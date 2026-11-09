@@ -29,9 +29,9 @@ def proxy_speak():
         # 年配のおばあちゃん風の落ち着いたおっとりした語り口を指示するプロンプト
         prompt = f"以下の俳句を、お年寄りの女性（おばあちゃん）のように、非常におっとりと優しく、落ち着いた低いトーンでゆっくり朗読してください。: {text}"
 
-        # 音声出力に対応している汎用モデル（gemini-2.5-flash）に変更
+        # 音声出力に対応している最新のモデル（gemini-3.8-flash）に変更
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-3.8-flash',
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_modalities=["AUDIO"]
