@@ -29,7 +29,6 @@ def proxy_speak():
     try:
         prompt = f"以下の俳句を、お年寄りの女性（おばあちゃん）のように、非常におっとりと優しく、落ち着いた低いトーンでゆっくり朗読してください。: {text}"
 
-        # APIの指定通り最新モデル「gemini-3.8-flash」を使用
         response = client.models.generate_content(
             model='gemini-3.8-flash',
             contents=prompt,
@@ -39,20 +38,43 @@ def proxy_speak():
         )
 
         audio_bytes = None
+        debug_info = [] # 原因究明のためのデバッグ情報を格納するリスト
+
+        # レスポンスの中身を解析
         if response.candidates:
-            for candidate in response.candidates:
+            for i, candidate in enumerate(response.candidates):
+                debug_info.append(f"Candidate[{i}] finish_reason: {candidate.finish_reason}")
                 if candidate.content and candidate.content.parts:
-                    for part in candidate.content.parts:
-                        if hasattr(part, 'inline_data') and part.inline_data and part.inline_data.data:
-                            audio_bytes = part.inline_data.data
-                            break
+                    for j, part in enumerate(candidate.content.parts):
+                        # テキストが返ってきていないかチェック
+                        if hasattr(part, 'text') and part.text:
+                            debug_info.append(f"part[{j}] Text: {part.text[:20]}...")
+                        
+                        # 音声データを探す
+                        if hasattr(part, 'inline_data') and part.inline_data:
+                            if hasattr(part.inline_data, 'data') and part.inline_data.data:
+                                audio_bytes = part.inline_data.data
+                                debug_info.append(f"part[{j}] Audio found!")
+                                break
+                            else:
+                                debug_info.append(f"part[{j}] inline_data is empty")
+                        else:
+                            # どんな属性を持っているか記録
+                            debug_info.append(f"part[{j}] attrs: {dir(part)}")
+                    
                     if audio_bytes:
                         break
+                else:
+                    debug_info.append("No content or parts in candidate")
+        else:
+            debug_info.append("No candidates in response")
 
         if not audio_bytes:
-            return "音声の生成に失敗しました（データが空です）", 500
+            # 取得したデバッグ情報をブラウザのエラー画面に表示させる
+            error_details = " | ".join(debug_info)
+            return f"音声データが見つかりません。APIの応答内容: {error_details}", 500
 
-        # 【最初の500エラーの真因対策】文字列(Base64)で返ってきた場合はバイナリに変換する
+        # 文字列(Base64)で返ってきた場合はバイナリに変換
         if isinstance(audio_bytes, str):
             audio_bytes = base64.b64decode(audio_bytes)
 
@@ -60,9 +82,9 @@ def proxy_speak():
         if not audio_bytes.startswith(b'RIFF'):
             wav_io = io.BytesIO()
             with wave.open(wav_io, 'wb') as wav_file:
-                wav_file.setnchannels(1)  # モノラル
-                wav_file.setsampwidth(2)  # 16bit (2bytes)
-                wav_file.setframerate(24000) # サンプリングレート
+                wav_file.setnchannels(1)  
+                wav_file.setsampwidth(2)  
+                wav_file.setframerate(24000) 
                 wav_file.writeframes(audio_bytes)
             audio_bytes = wav_io.getvalue()
 
