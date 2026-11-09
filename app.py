@@ -26,32 +26,32 @@ def proxy_speak():
         return "文章がありません", 400
 
     try:
-        # プロンプトの指示
+        # 読み上げの指示プロンプト
         prompt = f"以下の俳句を、お年寄りの女性（おばあちゃん）のように、非常におっとりと優しく、落ち着いた低いトーンでゆっくり朗読してください。: {text}"
 
+        # 音声出力対応モデル（gemini-2.5-flash）を指定
         response = client.models.generate_content(
-            model='gemini-2.5-flash', # もしエラーになる場合は gemini-3.8-flash に戻してください
+            model='gemini-2.5-flash',
             contents=prompt,
             config=types.GenerateContentConfig(
-                response_modalities=["AUDIO"]
+                response_modalities=["AUDIO"],
+                speech_config=types.SpeechConfig(
+                    voice_config=types.VoiceConfig(
+                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                            voice_name="Aoede"  # 落ち着いた声質
+                        )
+                    )
+                )
             )
         )
 
-        # デバッグ用：レスポンス全体をログに出力
-        print("API Response received:", response)
-
         # 生成された音声バイナリの抽出
         audio_bytes = None
-        if response.candidates:
-            for candidate in response.candidates:
-                if candidate.content and candidate.content.parts:
-                    for part in candidate.content.parts:
-                        # inline_data または audio_data などを探索
-                        if hasattr(part, 'inline_data') and part.inline_data and part.inline_data.data:
-                            audio_bytes = part.inline_data.data
-                            break
-                    if audio_bytes:
-                        break
+        for candidate in response.candidates:
+            for part in candidate.content.parts:
+                if part.inline_data and part.inline_data.data:
+                    audio_bytes = part.inline_data.data
+                    break
 
         if not audio_bytes:
             return "音声の生成に失敗しました（データが空です）", 500
