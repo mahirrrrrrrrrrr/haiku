@@ -29,9 +29,9 @@ def proxy_speak():
         # 読み上げの指示プロンプト
         prompt = f"以下の俳句を、お年寄りの女性（おばあちゃん）のように、非常におっとりと優しく、落ち着いた低いトーンでゆっくり朗読してください。: {text}"
 
-        # speech_config を完全に削除し、エラーを防ぐ
+        # エラーメッセージの指示通りモデル名を gemini-3.8-flash に変更
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-3.8-flash',
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_modalities=["AUDIO"]
@@ -40,11 +40,15 @@ def proxy_speak():
 
         # 生成された音声バイナリの抽出
         audio_bytes = None
-        for candidate in response.candidates:
-            for part in candidate.content.parts:
-                if part.inline_data and part.inline_data.data:
-                    audio_bytes = part.inline_data.data
-                    break
+        if response.candidates:
+            for candidate in response.candidates:
+                if candidate.content and candidate.content.parts:
+                    for part in candidate.content.parts:
+                        if hasattr(part, 'inline_data') and part.inline_data and part.inline_data.data:
+                            audio_bytes = part.inline_data.data
+                            break
+                    if audio_bytes:
+                        break
 
         if not audio_bytes:
             return "音声の生成に失敗しました（データが空です）", 500
