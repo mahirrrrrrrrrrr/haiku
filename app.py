@@ -29,19 +29,19 @@ def proxy_speak():
         # 年配のおばあちゃん風の落ち着いたおっとりした語り口を指示するプロンプト
         prompt = f"以下の俳句を、お年寄りの女性（おばあちゃん）のように、非常におっとりと優しく、落ち着いた低いトーンでゆっくり朗読してください。: {text}"
 
-        # Geminiの音声生成モデルを使用
+        # Geminiの音声生成モデルを使用（新しいSDKの仕様に合わせてspeech_configを修正）
         response = client.models.generate_content(
             model='gemini-2.5-flash-preview-tts',
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_modalities=["AUDIO"],
-                speech_config=types.SpeechConfig(
-                    voice_config=types.VoiceConfig(
-                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                            voice_name="Aoede"  # 落ち着いたトーンの音声（より年配・上品な女性風）
-                        )
-                    )
-                )
+                speech_config={
+                    "voice_config": {
+                        "prebuilt_voice_config": {
+                            "voice_name": "Aoede"  # 落ち着いたトーンの音声（より年配・上品な女性風）
+                        }
+                    }
+                }
             )
         )
 
