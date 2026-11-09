@@ -29,19 +29,12 @@ def proxy_speak():
         # 読み上げの指示プロンプト
         prompt = f"以下の俳句を、お年寄りの女性（おばあちゃん）のように、非常におっとりと優しく、落ち着いた低いトーンでゆっくり朗読してください。: {text}"
 
-        # speech_config を辞書形式で安全に指定
+        # speech_config を完全に削除し、エラーを防ぐ
         response = client.models.generate_content(
             model='gemini-2.5-flash',
             contents=prompt,
             config=types.GenerateContentConfig(
-                response_modalities=["AUDIO"],
-                speech_config={
-                    "voice_config": {
-                        "prebuilt_voice_config": {
-                            "voice_name": "Aoede"
-                        }
-                    }
-                }
+                response_modalities=["AUDIO"]
             )
         )
 
