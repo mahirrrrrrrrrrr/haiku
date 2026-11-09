@@ -1,4 +1,4 @@
 flask
-requests
 flask-cors
-google-genai
+google-genai>=1.0.0
+requests
