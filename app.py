@@ -29,9 +29,9 @@ def proxy_speak():
     try:
         prompt = f"以下の俳句を、お年寄りの女性（おばあちゃん）のように、非常におっとりと優しく、落ち着いた低いトーンでゆっくり朗読してください。: {text}"
 
-        # 【修正】存在する、かつ音声出力に対応しているモデル名に変更
+        # APIの指定通り最新モデル「gemini-3.8-flash」を使用
         response = client.models.generate_content(
-            model='gemini-2.5-flash', # または 'gemini-2.0-flash'
+            model='gemini-3.8-flash',
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_modalities=["AUDIO"]
@@ -52,7 +52,7 @@ def proxy_speak():
         if not audio_bytes:
             return "音声の生成に失敗しました（データが空です）", 500
 
-        # SDKのバージョンによっては base64文字列 で返ってくることがあるためデコード処理を追加
+        # 【最初の500エラーの真因対策】文字列(Base64)で返ってきた場合はバイナリに変換する
         if isinstance(audio_bytes, str):
             audio_bytes = base64.b64decode(audio_bytes)
 
@@ -62,7 +62,7 @@ def proxy_speak():
             with wave.open(wav_io, 'wb') as wav_file:
                 wav_file.setnchannels(1)  # モノラル
                 wav_file.setsampwidth(2)  # 16bit (2bytes)
-                wav_file.setframerate(24000) # サンプリングレート(Geminiの標準は24kHz)
+                wav_file.setframerate(24000) # サンプリングレート
                 wav_file.writeframes(audio_bytes)
             audio_bytes = wav_io.getvalue()
 
@@ -70,7 +70,6 @@ def proxy_speak():
 
     except Exception as e:
         traceback.print_exc()
-        # クライアント側（ブラウザのコンソール）でもエラーの具体的な内容を見えるように文字列で返す
         return f"サーバーエラーが発生しました: {str(e)}", 500
 
 if __name__ == '__main__':
