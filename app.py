@@ -27,38 +27,31 @@ def proxy_speak():
         return "文章がありません", 400
 
     try:
-        # 修正2: ただのテキストではなく、読み上げを強制するプロンプトにする
-        prompt = f"以下の文章を読み上げてください:\n\n{text}"
+        prompt = f"以下の俳句を、お年寄りの女性（おばあちゃん）のように、非常におっとりと優しく、落ち着いた低いトーンでゆっくり朗読してください。: {text}"
 
         response = client.models.generate_content(
-            model='gemini-2.5-flash', # 修正1: 音声出力対応モデルを指定
+            model='gemini-2.5-flash', # ← 存在しないモデル名から、音声対応モデルに変更
             contents=prompt,
             config=types.GenerateContentConfig(
-                system_instruction="あなたは指定されたテキストを、お年寄りの女性（おばあちゃん）のように、非常におっとりと優しく、落ち着いた低いトーンで読み上げる音声合成エンジンです。テキストでの返答、情景描写などの文字出力は一切禁止されています。入力された文字を純粋な音声データとしてのみ出力してください。",
-                response_modalities=["AUDIO"],
-                # 修正3: SpeechConfigを追加し、声質を指定（Aoede, Charon, Fenrir, Kore, Puck）
-                speech_config=types.SpeechConfig(
-                    voice_config=types.VoiceConfig(
-                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                            voice_name="Aoede" # 落ち着いた女性の声に近いものを選択
-                        )
-                    )
-                )
+                response_modalities=["AUDIO"]
+                # 400エラーの原因だった speech_config は削除済み
             )
         )
 
         audio_bytes = None
-        debug_info = []
+        debug_info = [] # 原因究明のためのデバッグ情報を格納するリスト
 
+        # レスポンスの中身を解析
         if response.candidates:
             for i, candidate in enumerate(response.candidates):
                 debug_info.append(f"Candidate[{i}] finish_reason: {candidate.finish_reason}")
                 if candidate.content and candidate.content.parts:
                     for j, part in enumerate(candidate.content.parts):
+                        # テキストが返ってきていないかチェック
                         if hasattr(part, 'text') and part.text:
                             debug_info.append(f"part[{j}] Text: {part.text[:20]}...")
-
-                        # 音声データの抽出
+                        
+                        # 音声データを探す
                         if hasattr(part, 'inline_data') and part.inline_data:
                             if hasattr(part.inline_data, 'data') and part.inline_data.data:
                                 audio_bytes = part.inline_data.data
@@ -67,8 +60,9 @@ def proxy_speak():
                             else:
                                 debug_info.append(f"part[{j}] inline_data is empty")
                         else:
+                            # どんな属性を持っているか記録
                             debug_info.append(f"part[{j}] attrs: {dir(part)}")
-
+                    
                     if audio_bytes:
                         break
                 else:
@@ -77,6 +71,7 @@ def proxy_speak():
             debug_info.append("No candidates in response")
 
         if not audio_bytes:
+            # 取得したデバッグ情報をブラウザのエラー画面に表示させる
             error_details = " | ".join(debug_info)
             return f"音声データが見つかりません。APIの応答内容: {error_details}", 500
 
