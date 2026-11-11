@@ -27,15 +27,15 @@ def proxy_speak():
         return "文章がありません", 400
 
     try:
-        # 読み上げるテキストのみを渡す
+        # 通常のプロンプトには余計な指示を含めず、読み上げるテキスト「のみ」を渡す
         prompt = text
 
         response = client.models.generate_content(
-            model='gemini-2.5-flash', # ※エラーになる場合は gemini-3.8-flash に変更
+            model='gemini-2.0-flash', # 音声出力対応の最新推奨モデル
             contents=prompt,
             config=types.GenerateContentConfig(
-                # エラーの原因となった speech_config を削除し、システムプロンプトとAUDIO指定のみにする
-                system_instruction="あなたはテキスト読み上げ（TTS）エンジンです。ユーザーが入力したテキストをそのまま音声として出力してください。情景描写、感情表現のト書き、テキストでの返答、勝手な文章の追加は一切行わないでください。",
+                # ここで「おばあちゃんのトーン」と「テキスト生成禁止」を同時に強制する
+                system_instruction="あなたは指定されたテキストを、お年寄りの女性（おばあちゃん）のように、非常におっとりと優しく、落ち着いた低いトーンで読み上げる音声合成エンジンです。テキストでの返答、情景描写などの文字出力は一切禁止されています。入力された文字を純粋な音声データとしてのみ出力してください。",
                 response_modalities=["AUDIO"]
             )
         )
@@ -45,19 +45,32 @@ def proxy_speak():
 
         if response.candidates:
             for i, candidate in enumerate(response.candidates):
+                debug_info.append(f"Candidate[{i}] finish_reason: {candidate.finish_reason}")
                 if candidate.content and candidate.content.parts:
                     for j, part in enumerate(candidate.content.parts):
+                        if hasattr(part, 'text') and part.text:
+                            debug_info.append(f"part[{j}] Text: {part.text[:20]}...")
+
                         if hasattr(part, 'inline_data') and part.inline_data:
                             if hasattr(part.inline_data, 'data') and part.inline_data.data:
                                 audio_bytes = part.inline_data.data
+                                debug_info.append(f"part[{j}] Audio found!")
                                 break
+                            else:
+                                debug_info.append(f"part[{j}] inline_data is empty")
+                        else:
+                            debug_info.append(f"part[{j}] attrs: {dir(part)}")
+
                     if audio_bytes:
                         break
+                else:
+                    debug_info.append("No content or parts in candidate")
+        else:
+            debug_info.append("No candidates in response")
 
         if not audio_bytes:
-            if response.text:
-                debug_info.append(f"Model returned text instead of audio: {response.text[:50]}...")
-            return f"音声データが見つかりません。APIの応答内容: {' | '.join(debug_info)}", 500
+            error_details = " | ".join(debug_info)
+            return f"音声データが見つかりません。APIの応答内容: {error_details}", 500
 
         # 文字列(Base64)で返ってきた場合はバイナリに変換
         if isinstance(audio_bytes, str):
@@ -67,9 +80,9 @@ def proxy_speak():
         if not audio_bytes.startswith(b'RIFF'):
             wav_io = io.BytesIO()
             with wave.open(wav_io, 'wb') as wav_file:
-                wav_file.setnchannels(1)  
-                wav_file.setsampwidth(2)  
-                wav_file.setframerate(24000) 
+                wav_file.setnchannels(1)
+                wav_file.setsampwidth(2)
+                wav_file.setframerate(24000)
                 wav_file.writeframes(audio_bytes)
             audio_bytes = wav_io.getvalue()
 
