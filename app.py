@@ -11,7 +11,7 @@ import wave
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Initialize the client with the API key from environment variables
+# 環境変数からAPIキーを取得
 api_key = os.environ.get("GEMINI_API_KEY")
 client = genai.Client(api_key=api_key)
 
@@ -27,19 +27,20 @@ def proxy_speak():
         return "文章がありません", 400
 
     try:
-        # STRICT RULE: Pass ONLY the raw text to be spoken.
-        # Do not include any instructions like "Read this like an old lady".
+        # 読み上げるテキストのみを渡す
         prompt = text
 
         response = client.models.generate_content(
-            model='gemini-2.5-flash', # Or gemini-3.8-flash if strictly required by your project
+            model='gemini-2.5-flash', # ※必要に応じてgemini-3.8-flashに変更してください
             contents=prompt,
             config=types.GenerateContentConfig(
+                # 【追加】AIに「読み上げエンジン」としてのみ振る舞うよう強制する
+                system_instruction="あなたはテキスト読み上げ（TTS）エンジンです。ユーザーが入力したテキストをそのまま音声として出力してください。情景描写、感情表現のト書き、テキストでの返答、勝手な文章の追加は一切行わないでください。",
                 response_modalities=["AUDIO"],
                 speech_config=types.SpeechConfig(
                     voice_config=types.VoiceConfig(
                         prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                            voice_name="Aoede"  # Aoede is a calm, female voice
+                            voice_name="Aoede" 
                         )
                     )
                 )
@@ -53,7 +54,6 @@ def proxy_speak():
             for i, candidate in enumerate(response.candidates):
                 if candidate.content and candidate.content.parts:
                     for j, part in enumerate(candidate.content.parts):
-                        # Explicitly check for inline_data which holds the audio
                         if hasattr(part, 'inline_data') and part.inline_data:
                             if hasattr(part.inline_data, 'data') and part.inline_data.data:
                                 audio_bytes = part.inline_data.data
@@ -62,16 +62,15 @@ def proxy_speak():
                         break
 
         if not audio_bytes:
-            # If it STILL returns text, capture it for debugging
             if response.text:
                 debug_info.append(f"Model returned text instead of audio: {response.text[:50]}...")
             return f"音声データが見つかりません。APIの応答内容: {' | '.join(debug_info)}", 500
 
-        # Decode if base64 string
+        # 文字列(Base64)で返ってきた場合はバイナリに変換
         if isinstance(audio_bytes, str):
             audio_bytes = base64.b64decode(audio_bytes)
 
-        # Ensure WAV format for browser playback
+        # WAVヘッダー（RIFF）がない場合、PCMデータをWAV化
         if not audio_bytes.startswith(b'RIFF'):
             wav_io = io.BytesIO()
             with wave.open(wav_io, 'wb') as wav_file:
