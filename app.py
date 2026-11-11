@@ -27,14 +27,17 @@ def proxy_speak():
         return "文章がありません", 400
 
     try:
-        prompt = f"以下の俳句を、お年寄りの女性（おばあちゃん）のように、非常におっとりと優しく、落ち着いた低いトーンでゆっくり朗読してください。: {text}"
+        # 修正: 余計な指示を外し、入力テキスト（俳句）のみをAIに渡す
+        prompt = text 
 
         response = client.models.generate_content(
-            model='gemini-3.8-flash', # ← APIの指示通り、最新モデルに修正
+            model='gemini-3.8-flash', # APIの指示に従い最新モデルを指定
             contents=prompt,
             config=types.GenerateContentConfig(
+                # 修正: キャラクター指示や「テキスト出力禁止」の命令をシステム側に設定
+                system_instruction="あなたは音声合成エンジンです。入力されたテキストを、お年寄りの女性のように、非常におっとりと優しく、落ち着いた低いトーンで読み上げてください。情景描写（カッコ書きなど）やテキストでの返答は一切出力せず、純粋な音声データのみを生成してください。",
                 response_modalities=["AUDIO"]
-                # エラーの原因となる speech_config は含めない
+                # speech_configはエラーの原因になるため含めない
             )
         )
 
