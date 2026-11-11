@@ -30,16 +30,16 @@ def proxy_speak():
         prompt = f"以下の俳句を、お年寄りの女性（おばあちゃん）のように、非常におっとりと優しく、落ち着いた低いトーンでゆっくり朗読してください。: {text}"
 
         response = client.models.generate_content(
-            model='gemini-2.5-flash', # ← 存在しないモデル名から、音声対応モデルに変更
+            model='gemini-3.8-flash', # ← APIの指示通り、最新モデルに修正
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_modalities=["AUDIO"]
-                # 400エラーの原因だった speech_config は削除済み
+                # エラーの原因となる speech_config は含めない
             )
         )
 
         audio_bytes = None
-        debug_info = [] # 原因究明のためのデバッグ情報を格納するリスト
+        debug_info = []
 
         # レスポンスの中身を解析
         if response.candidates:
@@ -60,7 +60,6 @@ def proxy_speak():
                             else:
                                 debug_info.append(f"part[{j}] inline_data is empty")
                         else:
-                            # どんな属性を持っているか記録
                             debug_info.append(f"part[{j}] attrs: {dir(part)}")
                     
                     if audio_bytes:
@@ -71,7 +70,6 @@ def proxy_speak():
             debug_info.append("No candidates in response")
 
         if not audio_bytes:
-            # 取得したデバッグ情報をブラウザのエラー画面に表示させる
             error_details = " | ".join(debug_info)
             return f"音声データが見つかりません。APIの応答内容: {error_details}", 500
 
