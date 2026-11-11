@@ -27,14 +27,12 @@ def proxy_speak():
         return "文章がありません", 400
 
     try:
-        # 通常のプロンプトには余計な指示を含めず、読み上げるテキスト「のみ」を渡す
         prompt = text
 
         response = client.models.generate_content(
-            model='gemini-2.0-flash', # 音声出力対応の最新推奨モデル
+            model='gemini-3.8-flash', # ← ここをエラーメッセージの指示通りに修正しました
             contents=prompt,
             config=types.GenerateContentConfig(
-                # ここで「おばあちゃんのトーン」と「テキスト生成禁止」を同時に強制する
                 system_instruction="あなたは指定されたテキストを、お年寄りの女性（おばあちゃん）のように、非常におっとりと優しく、落ち着いた低いトーンで読み上げる音声合成エンジンです。テキストでの返答、情景描写などの文字出力は一切禁止されています。入力された文字を純粋な音声データとしてのみ出力してください。",
                 response_modalities=["AUDIO"]
             )
