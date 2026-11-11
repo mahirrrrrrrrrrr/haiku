@@ -31,19 +31,12 @@ def proxy_speak():
         prompt = text
 
         response = client.models.generate_content(
-            model='gemini-2.5-flash', # ※必要に応じてgemini-3.8-flashに変更してください
+            model='gemini-2.5-flash', # ※エラーになる場合は gemini-3.8-flash に変更
             contents=prompt,
             config=types.GenerateContentConfig(
-                # 【追加】AIに「読み上げエンジン」としてのみ振る舞うよう強制する
+                # エラーの原因となった speech_config を削除し、システムプロンプトとAUDIO指定のみにする
                 system_instruction="あなたはテキスト読み上げ（TTS）エンジンです。ユーザーが入力したテキストをそのまま音声として出力してください。情景描写、感情表現のト書き、テキストでの返答、勝手な文章の追加は一切行わないでください。",
-                response_modalities=["AUDIO"],
-                speech_config=types.SpeechConfig(
-                    voice_config=types.VoiceConfig(
-                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                            voice_name="Aoede" 
-                        )
-                    )
-                )
+                response_modalities=["AUDIO"]
             )
         )
 
