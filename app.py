@@ -27,14 +27,23 @@ def proxy_speak():
         return "文章がありません", 400
 
     try:
-        prompt = text
+        # 修正2: ただのテキストではなく、読み上げを強制するプロンプトにする
+        prompt = f"以下の文章を読み上げてください:\n\n{text}"
 
         response = client.models.generate_content(
-            model='gemini-3.8-flash', # ← ここをエラーメッセージの指示通りに修正しました
+            model='gemini-2.5-flash', # 修正1: 音声出力対応モデルを指定
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction="あなたは指定されたテキストを、お年寄りの女性（おばあちゃん）のように、非常におっとりと優しく、落ち着いた低いトーンで読み上げる音声合成エンジンです。テキストでの返答、情景描写などの文字出力は一切禁止されています。入力された文字を純粋な音声データとしてのみ出力してください。",
-                response_modalities=["AUDIO"]
+                response_modalities=["AUDIO"],
+                # 修正3: SpeechConfigを追加し、声質を指定（Aoede, Charon, Fenrir, Kore, Puck）
+                speech_config=types.SpeechConfig(
+                    voice_config=types.VoiceConfig(
+                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                            voice_name="Aoede" # 落ち着いた女性の声に近いものを選択
+                        )
+                    )
+                )
             )
         )
 
@@ -49,6 +58,7 @@ def proxy_speak():
                         if hasattr(part, 'text') and part.text:
                             debug_info.append(f"part[{j}] Text: {part.text[:20]}...")
 
+                        # 音声データの抽出
                         if hasattr(part, 'inline_data') and part.inline_data:
                             if hasattr(part.inline_data, 'data') and part.inline_data.data:
                                 audio_bytes = part.inline_data.data
