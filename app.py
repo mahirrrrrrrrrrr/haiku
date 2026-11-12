@@ -6,14 +6,18 @@ from flask_cors import CORS
 from google import genai
 from google.genai import types
 import traceback
-import wave
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # 環境変数からAPIキーを取得
 api_key = os.environ.get("GEMINI_API_KEY")
-client = genai.Client(api_key=api_key)
+
+# 【重要】音声生成などの最新機能を使うため、明示的に v1alpha バージョンを指定します
+client = genai.Client(
+    api_key=api_key,
+    http_options={'api_version': 'v1alpha'}
+)
 
 @app.route('/proxy-speak', methods=['POST', 'OPTIONS'])
 def proxy_speak():
@@ -22,72 +26,54 @@ def proxy_speak():
 
     data = request.get_json() or {}
     text = data.get('text', '')
- 
+    
     if not text:
         return "文章がありません", 400
 
     try:
-        prompt = f"以下の俳句を、お年寄りの女性（おばあちゃん）のように、非常におっとりと優しく、落ち着いた低いトーンでゆっくり朗読してください。: {text}"
+        prompt = f"以下のテキストを読み上げてください。\nテキスト: {text}"
+
+        # モデルは現状最も安定している gemini-2.0-flash を指定します
+        # ※もし再度「3.8-flashにしてください」というエラーが出た場合は、'gemini-3.8-flash'に書き換えてください。
+        model_name = 'gemini-2.0-flash'
 
         response = client.models.generate_content(
-            model='gemini-3.8-flash',
+            model=model_name,
             contents=prompt,
             config=types.GenerateContentConfig(
-                response_modalities=["AUDIO"]
+                system_instruction="あなたは音声合成エンジンです。テキスト出力は一切禁止し、純粋な音声データのみを生成してください。",
+                response_modalities=["AUDIO"],
+                # v1alphaを指定したことで、音声の種類を細かく設定できるようになります
+                speech_config=types.SpeechConfig(
+                    voice_config=types.VoiceConfig(
+                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                            voice_name="Aoede" # 女性の落ち着いた声（Aoede, Puck, Charon, Kore, Fenrirから選択可能）
+                        )
+                    )
+                )
             )
         )
 
         audio_bytes = None
-        debug_info = [] # 原因究明のためのデバッグ情報を格納するリスト
-
-        # レスポンスの中身を解析
+        
+        # レスポンスから音声バイナリを抽出
         if response.candidates:
-            for i, candidate in enumerate(response.candidates):
-                debug_info.append(f"Candidate[{i}] finish_reason: {candidate.finish_reason}")
+            for candidate in response.candidates:
                 if candidate.content and candidate.content.parts:
-                    for j, part in enumerate(candidate.content.parts):
-                        # テキストが返ってきていないかチェック
-                        if hasattr(part, 'text') and part.text:
-                            debug_info.append(f"part[{j}] Text: {part.text[:20]}...")
- 
-                        # 音声データを探す
-                        if hasattr(part, 'inline_data') and part.inline_data:
-                            if hasattr(part.inline_data, 'data') and part.inline_data.data:
-                                audio_bytes = part.inline_data.data
-                                debug_info.append(f"part[{j}] Audio found!")
-                                break
-                            else:
-                                debug_info.append(f"part[{j}] inline_data is empty")
-                        else:
-                            # どんな属性を持っているか記録
-                            debug_info.append(f"part[{j}] attrs: {dir(part)}")
- 
-                    if audio_bytes:
-                        break
-                else:
-                    debug_info.append("No content or parts in candidate")
-        else:
-            debug_info.append("No candidates in response")
+                    for part in candidate.content.parts:
+                        if hasattr(part, 'inline_data') and part.inline_data and part.inline_data.data:
+                            audio_bytes = part.inline_data.data
+                            break
+                if audio_bytes:
+                    break
 
         if not audio_bytes:
-            # 取得したデバッグ情報をブラウザのエラー画面に表示させる
-            error_details = " | ".join(debug_info)
-            return f"音声データが見つかりません。APIの応答内容: {error_details}", 500
+            return "音声データが生成されませんでした。APIがテキストのみを返却した可能性があります。", 500
 
-        # 文字列(Base64)で返ってきた場合はバイナリに変換
         if isinstance(audio_bytes, str):
             audio_bytes = base64.b64decode(audio_bytes)
 
-        # WAVヘッダー（RIFF）がない場合、PCMデータをWAV化
-        if not audio_bytes.startswith(b'RIFF'):
-            wav_io = io.BytesIO()
-            with wave.open(wav_io, 'wb') as wav_file:
-                wav_file.setnchannels(1)
-                wav_file.setsampwidth(2)
-                wav_file.setframerate(24000)
-                wav_file.writeframes(audio_bytes)
-            audio_bytes = wav_io.getvalue()
-
+        # 生成された音声を直接WAVとしてMonacaアプリへ返却します
         return send_file(io.BytesIO(audio_bytes), mimetype='audio/wav')
 
     except Exception as e:
