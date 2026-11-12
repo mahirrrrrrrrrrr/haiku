@@ -28,9 +28,9 @@ def proxy_speak():
     try:
         prompt = f"以下のテキストを読み上げてください。\nテキスト: {text}"
 
-        # speech_configを削除し、純粋に音声出力(AUDIO)のみを要求します
+        # エラーメッセージの指示通り、最新の gemini-3.8-flash を指定します
         response = client.models.generate_content(
-            model='gemini-2.0-flash',
+            model='gemini-3.8-flash',
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction="あなたは音声合成エンジンです。テキスト出力は一切禁止し、純粋な音声データのみを生成してください。",
