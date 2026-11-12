@@ -6,6 +6,7 @@ from flask_cors import CORS
 from google import genai
 from google.genai import types
 import traceback
+import wave
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -21,45 +22,72 @@ def proxy_speak():
 
     data = request.get_json() or {}
     text = data.get('text', '')
-    
+ 
     if not text:
         return "文章がありません", 400
 
     try:
-        prompt = f"以下のテキストを読み上げてください。\nテキスト: {text}"
+        prompt = f"以下の俳句を、お年寄りの女性（おばあちゃん）のように、非常におっとりと優しく、落ち着いた低いトーンでゆっくり朗読してください。: {text}"
 
-        # エラーメッセージの指示通り、最新の gemini-3.8-flash を指定します
         response = client.models.generate_content(
             model='gemini-3.8-flash',
             contents=prompt,
             config=types.GenerateContentConfig(
-                system_instruction="あなたは音声合成エンジンです。テキスト出力は一切禁止し、純粋な音声データのみを生成してください。",
                 response_modalities=["AUDIO"]
             )
         )
 
         audio_bytes = None
-        
-        # レスポンスから音声データを抽出
+        debug_info = [] # 原因究明のためのデバッグ情報を格納するリスト
+
+        # レスポンスの中身を解析
         if response.candidates:
-            for candidate in response.candidates:
+            for i, candidate in enumerate(response.candidates):
+                debug_info.append(f"Candidate[{i}] finish_reason: {candidate.finish_reason}")
                 if candidate.content and candidate.content.parts:
-                    for part in candidate.content.parts:
-                        # APIからの音声データは inline_data.data に格納される
-                        if hasattr(part, 'inline_data') and part.inline_data and part.inline_data.data:
-                            audio_bytes = part.inline_data.data
-                            break
-                if audio_bytes:
-                    break
+                    for j, part in enumerate(candidate.content.parts):
+                        # テキストが返ってきていないかチェック
+                        if hasattr(part, 'text') and part.text:
+                            debug_info.append(f"part[{j}] Text: {part.text[:20]}...")
+ 
+                        # 音声データを探す
+                        if hasattr(part, 'inline_data') and part.inline_data:
+                            if hasattr(part.inline_data, 'data') and part.inline_data.data:
+                                audio_bytes = part.inline_data.data
+                                debug_info.append(f"part[{j}] Audio found!")
+                                break
+                            else:
+                                debug_info.append(f"part[{j}] inline_data is empty")
+                        else:
+                            # どんな属性を持っているか記録
+                            debug_info.append(f"part[{j}] attrs: {dir(part)}")
+ 
+                    if audio_bytes:
+                        break
+                else:
+                    debug_info.append("No content or parts in candidate")
+        else:
+            debug_info.append("No candidates in response")
 
         if not audio_bytes:
-            return "音声データが生成されませんでした。APIがテキストのみを返却した可能性があります。", 500
+            # 取得したデバッグ情報をブラウザのエラー画面に表示させる
+            error_details = " | ".join(debug_info)
+            return f"音声データが見つかりません。APIの応答内容: {error_details}", 500
 
         # 文字列(Base64)で返ってきた場合はバイナリに変換
         if isinstance(audio_bytes, str):
             audio_bytes = base64.b64decode(audio_bytes)
 
-        # 音声データをWAV形式として返却
+        # WAVヘッダー（RIFF）がない場合、PCMデータをWAV化
+        if not audio_bytes.startswith(b'RIFF'):
+            wav_io = io.BytesIO()
+            with wave.open(wav_io, 'wb') as wav_file:
+                wav_file.setnchannels(1)
+                wav_file.setsampwidth(2)
+                wav_file.setframerate(24000)
+                wav_file.writeframes(audio_bytes)
+            audio_bytes = wav_io.getvalue()
+
         return send_file(io.BytesIO(audio_bytes), mimetype='audio/wav')
 
     except Exception as e:
