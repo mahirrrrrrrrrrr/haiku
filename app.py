@@ -35,7 +35,7 @@ def proxy_speak():
 
         # モデルは現状最も安定している gemini-2.0-flash を指定します
         # ※もし再度「3.8-flashにしてください」というエラーが出た場合は、'gemini-3.8-flash'に書き換えてください。
-        model_name = 'gemini-2.0-flash'
+        model_name = 'gemini-3.8-flash'
 
         response = client.models.generate_content(
             model=model_name,
