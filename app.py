@@ -28,20 +28,13 @@ def proxy_speak():
     try:
         prompt = f"以下のテキストを読み上げてください。\nテキスト: {text}"
 
+        # speech_configを削除し、純粋に音声出力(AUDIO)のみを要求します
         response = client.models.generate_content(
-            model='gemini-2.0-flash', # 【修正1】音声出力に対応した正しいモデル名を指定
+            model='gemini-2.0-flash',
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction="あなたは音声合成エンジンです。テキスト出力は一切禁止し、純粋な音声データのみを生成してください。",
-                response_modalities=["AUDIO"],
-                # 【修正2】音声生成を強制するために、定義済みの声（Voice）を明確に指定
-                speech_config=types.SpeechConfig(
-                    voice_config=types.VoiceConfig(
-                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                            voice_name="Aoede" # 女性の落ち着いた声。他に Puck, Charon, Kore, Fenrir が指定可能
-                        )
-                    )
-                )
+                response_modalities=["AUDIO"]
             )
         )
 
@@ -60,15 +53,13 @@ def proxy_speak():
                     break
 
         if not audio_bytes:
-            # 抽出できなかった場合の安全策
             return "音声データが生成されませんでした。APIがテキストのみを返却した可能性があります。", 500
 
         # 文字列(Base64)で返ってきた場合はバイナリに変換
         if isinstance(audio_bytes, str):
             audio_bytes = base64.b64decode(audio_bytes)
 
-        # Geminiが生成した音声データはそのままブラウザで再生できるフォーマットのため
-        # 直接 BytesIO に乗せて返却します
+        # 音声データをWAV形式として返却
         return send_file(io.BytesIO(audio_bytes), mimetype='audio/wav')
 
     except Exception as e:
